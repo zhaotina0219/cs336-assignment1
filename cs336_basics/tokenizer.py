@@ -1,6 +1,7 @@
 import regex
 PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
 from collections import Counter
+from collections.abc import Iterable, Iterator
 def train_bpe(
         input_path:str,
         vocab_size:int,
@@ -76,15 +77,131 @@ def train_bpe(
             new_word_counts[res_tuple] = new_word_counts.get(res_tuple,0) + count
         word_counts = new_word_counts  
     return vocab,merges
+class Tokenizer:
+    def __init__(self,vocab,merges,special_tokens = None):
+        self.vocab = dict(vocab) # 为了避免后续添加特殊token修改原字典，此处进行字典拷贝
+        self.merges = merges
+        if special_tokens is None:
+            self.special_tokens = []
+        else:
+            self.special_tokens = list(special_tokens)
+        self.byte_to_id = {}
+        for token_id,token_word in self.vocab.items():
+            self.byte_to_id[token_word] = token_id
+        for spe in self.special_tokens:
+            spec_bytes = spe.encode("utf-8") # 使用in/not in可以快速判断字典是否存在某个特定键
+            if spec_bytes in self.byte_to_id:
+                continue
+            else:
+                new_id = len(self.vocab)
+                self.byte_to_id[spec_bytes] = new_id
+                self.vocab[new_id] = spec_bytes
+        self.merge_ranks = {}
+        for rank,pair in enumerate(self.merges):
+            self.merge_ranks[pair] = rank
+    
+    def decode(self,ids:list[int]) -> str:
+        bytes_list = []
+        for i in ids:
+            if i in self.vocab:
+                bytes_list.append(self.vocab[i])
+            else:
+                raise ValueError(f"Token ID {i} 不在词表中") # raise抛出异常，终止当前函数运行
+        res = b"".join(bytes_list)
+        text = res.decode("utf-8",errors="replace")
+        return text
 
+    def encode(self,text:str) -> list[int]:
+        token_ids = []
+        pre_tokens = []
+        sorted_special_tokens = sorted(self.special_tokens, key = len, reverse = True)
+        escaped_special_tokens = []
+        for special_token in sorted_special_tokens:
+            escaped_special_tokens.append(regex.escape(special_token))
+        if escaped_special_tokens:
+            special_tokens_pattern = "(" + "|".join(escaped_special_tokens) + ")"
+            res = regex.split(special_tokens_pattern, text)
+        else:
+            res = [text]
+        special_tokens_set = set(self.special_tokens)
+        for part in res:
+            if part in special_tokens_set:
+                pre_tokens.append(part)
+            else:
+                matches = regex.finditer(PAT, part)
+                for match in matches:
+                    pre_tokens.append(match.group())  # pre_tokens是预分词结果 
+        for pre_token in pre_tokens:
+            if pre_token in special_tokens_set:
+                special_bytes = pre_token.encode("utf-8")
+                if special_bytes not in self.byte_to_id:
+                    raise ValueError(f"词表中不存在特殊 token: {pre_token}")
+                token_ids.append(self.byte_to_id[special_bytes])
+                continue
+            pre_token_bytes = pre_token.encode("utf-8")
+            symbols = []
+            
+            for i in pre_token_bytes:
+                symbols.append(bytes([i]))
+            while(True):
+                best_pair = None
+                best_rank = None
+                for i in range(len(symbols) - 1):
+                    pair = (symbols[i],symbols[i+1])
+                    if pair in self.merge_ranks:
+                        rank = self.merge_ranks[pair]
+                        if best_rank is None or rank < best_rank:
+                            best_pair = pair
+                            best_rank = rank
+                if best_pair is None:
+                        break
+                else:
+                    new_symbols = []
+                    i = 0
+                    while i < len(symbols):
+                        if (
+                        i + 1 < len(symbols)
+                        and (symbols[i], symbols[i + 1]) == best_pair
+                        ):
+                            merged_symbol = symbols[i] + symbols[i + 1]
+                            new_symbols.append(merged_symbol)
+                            i += 2
+                        else:
+                            new_symbols.append(symbols[i])
+                            i += 1
+                    symbols = new_symbols
+            for symbol in symbols:
+                if symbol not in self.byte_to_id:
+                    raise ValueError(f"词表中不存在token:{symbol}")
+                token_ids.append(self.byte_to_id[symbol]) # 查询字典使用方括号
+        return token_ids
+
+    def encode_iterable(
+            self,
+            iterable:Iterable[str],
+    ) -> Iterator[int]:
+        for text in iterable:
+            token_ids = self.encode(text)
+            for token_id in token_ids:
+                yield token_id # yield可以将函数变成生成器，返回一个迭代器对象
+        
+
+
+
+
+
+
+
+
+    
 
         
 
 
 
     
-li = ["<|endoftext|>"]              # 创建列表直接使用方括号，不需要在方括号前添加关键字list
-vocab,merges = train_bpe("tests/fixtures/corpus.en",500,li)
+             # 创建列表直接使用方括号，不需要在方括号前添加关键字list
+
 
 
     
