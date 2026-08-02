@@ -1,4 +1,5 @@
 import regex
+import pickle
 PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
 from collections import Counter
 from collections.abc import Iterable, Iterator
@@ -78,6 +79,21 @@ def train_bpe(
         word_counts = new_word_counts  
     return vocab,merges
 class Tokenizer:
+    @classmethod
+    def from_files(
+        cls,
+        vocab_filepath:str,
+        merges_filepath:str,
+        special_tokens:list[str] | None = None
+    ):
+        with open(vocab_filepath,"rb") as file:  # 路径变量不能加引号
+            vocab = pickle.load(file)
+        with open(merges_filepath,"rb") as file:
+            merges = pickle.load(file)
+        return cls(vocab,merges,special_tokens)
+
+
+
     def __init__(self,vocab,merges,special_tokens = None):
         self.vocab = dict(vocab) # 为了避免后续添加特殊token修改原字典，此处进行字典拷贝
         self.merges = merges
@@ -184,7 +200,8 @@ class Tokenizer:
             token_ids = self.encode(text)
             for token_id in token_ids:
                 yield token_id # yield可以将函数变成生成器，返回一个迭代器对象
-        
+
+       
 
 
 
