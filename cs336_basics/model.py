@@ -31,4 +31,30 @@ class Linear(nn.Module):
  
     def forward(self,x:torch.Tensor) -> torch.Tensor:
         return (x @ self.weight.T)
-         
+
+class Embedding(nn.Module):
+    def __init__(
+            self,
+            num_embeddings:int,
+            embedding_dim:int,
+            device=None,
+            dtype=None,
+    ):
+        super().__init__()
+        weight_tensor = torch.empty(
+            (num_embeddings,embedding_dim),
+            device=device,
+            dtype=dtype,
+        )
+        self.weight = nn.Parameter(weight_tensor)
+        nn.init.trunc_normal_(
+            self.weight,
+            mean = 0,
+            std = 1,
+            a = -3,
+            b = 3
+        )
+    def forward(self,token_ids:torch.Tensor) -> torch.Tensor:
+        return self.weight[token_ids]
+
+
