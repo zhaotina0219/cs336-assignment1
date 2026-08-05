@@ -3,7 +3,7 @@ from cs336_basics.tokenizer import Tokenizer, train_bpe
 import os
 from collections.abc import Iterable
 from typing import IO, Any, BinaryIO
-from cs336_basics.model import Embedding,Linear,RMSNorm,silu,SwiGLU
+from cs336_basics.model import Embedding,Linear,RMSNorm,silu,SwiGLU,RotaryPositionalEmbedding
 import numpy.typing as npt
 import torch
 from jaxtyping import Bool, Float, Int
@@ -221,7 +221,13 @@ def run_rope(
     Returns:
         Float[Tensor, " ... sequence_length d_k"]: Tensor with RoPEd input.
     """
-    raise NotImplementedError
+    layer = RotaryPositionalEmbedding(
+        d_k = d_k,
+        theta = theta,
+        max_seq_len = max_seq_len,
+        device = in_query_or_key.device
+    )
+    return layer(in_query_or_key,token_positions)
 
 
 def run_transformer_block(

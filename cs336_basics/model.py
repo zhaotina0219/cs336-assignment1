@@ -107,3 +107,63 @@ class SwiGLU(nn.Module):
         gate = self.w3(x)
         gated = activated * gate
         return self.w2(gated)
+# RoPE写入位置信息，位置越靠后旋转角度越大，不同维度的旋转速度不同
+class RotaryPositionalEmbedding(nn.Module):
+    def __init__(
+            self,
+            theta:float,
+            d_k:int,
+            max_seq_len:int,
+            device=None
+    ):
+        super().__init__()
+        self.theta = theta
+        self.d_k = d_k
+        self.max_seq_len = max_seq_len
+        if d_k % 2 != 0:
+            raise ValueError("d_k 必须是偶数")
+        dimension_indices = torch.arange(
+            0,
+            d_k,
+            2,
+            device=device,
+            dtype=torch.float32,
+        )
+        # 每一对共享一个旋转角度，torch.outer用于计算一维向量的外积
+        inverse_frequencies = 1.0 / (theta ** (dimension_indices/d_k))
+        position_indices = torch.arange(
+            0,
+            max_seq_len,
+            1,
+            device = device,
+            dtype = torch.float32
+        )
+        angles = torch.outer(
+            position_indices,
+            inverse_frequencies
+        )
+        cosine_values = torch.cos(angles)
+        sine_values = torch.sin(angles)
+        self.register_buffer(
+            "cos_table",
+            cosine_values,
+            persistent=False,
+)
+        self.register_buffer(
+            "sin_table",
+            sine_values,
+            persistent=False,
+)
+        
+    def forward(self,x:torch.Tensor,token_positions:torch.Tensor) -> torch.Tensor:
+        cos_values = self.cos_table[token_positions]
+        sin_values = self.sin_table[token_positions]
+        cos_trans = cos_values.to(x.dtype)
+        sin_trans = sin_values.to(x.dtype)
+        x_even = x[...,0::2]
+        x_odd = x[...,1::2]
+        rotated_even = x_even * cos_trans - x_odd * sin_trans
+        rotated_odd = x_even * sin_trans + x_odd * cos_trans
+        stacked = torch.stack([rotated_even,rotated_odd],dim=-1)
+        flattened = stacked.flatten(start_dim=-2)
+        return flattened
