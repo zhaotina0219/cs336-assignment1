@@ -3,7 +3,8 @@ from cs336_basics.tokenizer import Tokenizer, train_bpe
 import os
 from collections.abc import Iterable
 from typing import IO, Any, BinaryIO
-from cs336_basics.model import Embedding,Linear,RMSNorm,silu,SwiGLU,RotaryPositionalEmbedding
+from cs336_basics.model import Embedding,Linear,RMSNorm,silu,SwiGLU,RotaryPositionalEmbedding,softmax
+from cs336_basics.model import scaled_dot_product_attention
 import numpy.typing as npt
 import torch
 from jaxtyping import Bool, Float, Int
@@ -125,7 +126,13 @@ def run_scaled_dot_product_attention(
     Returns:
         Float[Tensor, " ... queries d_v"]: Output of SDPA
     """
-    raise NotImplementedError
+    res = scaled_dot_product_attention(
+        Q = Q,
+        K = K,
+        V = V, 
+        mask = mask,
+    )
+    return res
 
 
 def run_multihead_self_attention(
@@ -466,7 +473,7 @@ def run_softmax(in_features: Float[Tensor, " ..."], dim: int) -> Float[Tensor, "
         Float[Tensor, "..."]: Tensor of with the same shape as `in_features` with the output of
         softmax normalizing the specified `dim`.
     """
-    raise NotImplementedError
+    return (softmax(x = in_features, dim = dim))
 
 
 def run_cross_entropy(

@@ -167,3 +167,43 @@ class RotaryPositionalEmbedding(nn.Module):
         stacked = torch.stack([rotated_even,rotated_odd],dim=-1)
         flattened = stacked.flatten(start_dim=-2)
         return flattened
+# softmax不能对原始数值直接做exp，容易溢出为inf，因此实现时沿某一维度找到最大值，再令x-max，此时最大值也不过为0
+def softmax(
+        x:torch.Tensor,
+        dim:int,
+) -> torch.Tensor:
+    max_result = torch.max(
+        x,
+        dim = dim,
+        keepdim = True,
+    )
+    # 指定dim之后，max函数不仅返回最大值，还会返回最大值的索引
+    max_values = max_result.values
+    stable_x = x - max_values
+    exp_values = torch.exp(stable_x)
+    exp_values_sum = exp_values.sum(
+        dim = dim,
+        keepdim = True,
+    )
+    prop = exp_values / exp_values_sum
+    return prop
+
+def scaled_dot_product_attention(
+        Q:torch.Tensor,
+        K:torch.Tensor,
+        V:torch.Tensor,
+        mask:torch.Tensor|None=None    
+) -> torch.Tensor:
+    d_k = Q.shape[-1]
+    K_transposed = K.transpose(-2,-1)
+    scores = Q @ K_transposed / math.sqrt(d_k)
+    # masked_fill(mask,value)会把mask中为True的位置替换为指定值
+    if mask is not None:
+        scores = scores.masked_fill(~mask,
+                                        float("-inf"),)
+    weights = softmax(
+        x = scores,
+        dim = -1,
+    )
+    output = weights @ V
+    return output
